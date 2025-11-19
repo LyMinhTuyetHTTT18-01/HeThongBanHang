@@ -1,0 +1,69 @@
+﻿--Tự động cập nhật tồn kho sau khi thêm chi tiết đơn hàng
+CREATE TRIGGER T_Giam_TonKho_AfterInsert
+ON CHITIETDONHANG
+AFTER INSERT
+AS
+BEGIN
+UPDATE SANPHAM
+SET SoLuongTonKho = SoLuongTonKho - i.SoLuong
+FROM SANPHAM SP
+JOIN inserted i ON SP.MaSP = i.MaSP;
+END;
+GO
+
+INSERT INTO CHITIETDONHANG (MaDH, MaSP, SoLuong, GiaBan)
+VALUES (1, 'QA001', 1, 850000);
+
+SELECT * FROM SANPHAM WHERE MaSP='QA001';
+
+--Khôi phục tồn kho nếu xóa chi tiết đơn hàng
+CREATE TRIGGER T_KhoiPhuc_TonKho_AfterDelete
+ON CHITIETDONHANG
+AFTER DELETE
+AS
+BEGIN
+UPDATE SANPHAM
+SET SoLuongTonKho = SoLuongTonKho + d.SoLuong
+FROM SANPHAM SP
+JOIN deleted d ON SP.MaSP = d.MaSP;
+END;
+GO
+
+DELETE FROM CHITIETDONHANG WHERE MaChiTiet = 1;
+
+SELECT * FROM SANPHAM WHERE MaSP='QA001';
+
+--Không cho xóa khách hàng nếu còn đơn hàng
+CREATE TRIGGER T_KiemTra_XoaKH
+ON KHACHHANG
+INSTEAD OF DELETE
+AS
+BEGIN
+IF EXISTS (SELECT * FROM DONHANG DH JOIN deleted d ON DH.MaKH = d.MaKH)
+BEGIN
+RAISERROR('Khong the xoa vi khach hang con don hang!', 16, 1);
+RETURN;
+END
+
+
+DELETE FROM KHACHHANG WHERE MaKH IN (SELECT MaKH FROM deleted);
+END;
+GO
+
+DELETE FROM KHACHHANG WHERE MaKH='KH001';
+
+--Không cho nhập số lượng âm
+CREATE TRIGGER T_KiemTra_SoLuongSP
+ON SANPHAM
+FOR UPDATE
+AS
+BEGIN
+IF EXISTS(SELECT * FROM inserted WHERE SoLuongTonKho < 0)
+BEGIN
+RAISERROR('So luong ton kho khong duoc am!', 16, 1);
+ROLLBACK TRANSACTION;
+END
+END;
+GO
+
+UPDATE SANPHAM SET SoLuongTonKho = -10 WHERE MaSP='QA001';
